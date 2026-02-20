@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EduNova AI</title>
+<style>
+body{ font-family:sans-serif; background:#0b0b0f; color:#fff; padding:20px;}
+input, button{ padding:10px; margin:5px; font-size:16px;}
+#answer,#examContainer,#score,#notes{ margin-top:20px; padding:15px; background:#111; border-radius:12px;}
+</style>
+</head>
+<body>
+
+<h1>EduNova AI Tutor</h1>
+
+<input id="question" placeholder="Type your question...">
+<button onclick="askAI()">Ask AI</button>
+<button onclick="startListening()">🎙 Speak</button>
+<button onclick="listenAnswer()">🔊 Listen Answer</button>
+
+<p id="answer"></p>
+
+<button onclick="startExam()">🧪 Start Mock Exam</button>
+<div id="timer"></div>
+<div id="examContainer"></div>
+<div id="score"></div>
+
+<button onclick="getRevisionNotes()">📝 Generate Revision Notes</button>
+<div id="notes"></div>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script>
+
+<script>
+const BACKEND = "https://edunova-backend.up.railway.app";
+let latestAnswer = "";
+let currentExam = [];
+
+/* AI Tutor */
+async function askAI(){
+const question = document.getElementById("question").value;
+const response = await fetch(BACKEND+"/ask",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({question,subject:"Mathematics"})
+});
+const data = await response.json();
+latestAnswer = data.reply;
+document.getElementById("answer").innerText = latestAnswer;
+}
+
+/* Voice Input */
+function startListening(){
+if(!('webkitSpeechRecognition' in window)){
+alert("Speech recognition not supported.");
+return;
+}
+const recognition = new webkitSpeechRecognition();
+recognition.lang = "en-US";
+recognition.start();
+recognition.onresult=function(event){
+document.getElementById("question").value = event.results[0][0].transcript;
+}
+}
+
+/* Voice Output */
+async function listenAnswer(){
+if(!latestAnswer) return;
+const response = await fetch(BACKEND+"/voice",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({text:latestAnswer})
+});
+const blob = await response.blob();
+const audio = new Audio(URL.createObjectURL(blob));
+audio.play();
+}
+
+/* Mock Exam */
+let timeLeft=300; let timerInterval;
+async function startExam(){
+const response = await fetch(BACKEND+"/mock-exam",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({subject:"Mathematics"})
+});
+const data = await response.json();
+currentExam = JSON.parse(data.exam);
+const container = document.getElementById("examContainer");
+container.innerHTML="";
+currentExam.forEach((q,index)=>{
+container.innerHTML += `<div>
+<p>${index+1}. ${q.question}</p>
+${q.options.map((opt,i)=>`<label><input type="radio" name="q${index}" value="${i}"> ${opt}</label><br>`).join("")}
+</div><hr>`;
+});
+startTimer();
+}
+
+function startTimer(){
+timeLeft=300;
+timerInterval=setInterval(()=>{
+timeLeft--;
+document.getElementById("timer").innerText="Time Left: "+timeLeft+"s";
+if(timeLeft<=0){ clearInterval(timerInterval); gradeExam(); }
+},1000);
+}
+
+function gradeExam(){
+let score=0;
+currentExam.forEach((q,index)=>{
+const selected=document.querySelector(`input[name="q${index}"]:checked`);
+if(selected && parseInt(selected.value)===q.answer) score++;
+});
+document.getElementById("score").innerText=`Your Score: ${score}/${currentExam.length}`;
+clearInterval(timerInterval);
+}
+
+/* Revision Notes */
+async function getRevisionNotes(){
+const response = await fetch(BACKEND+"/revision-notes",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({subject:"Mathematics",topic:"Algebra"})
+});
+const data = await response.json();
+document.getElementById("notes").innerText=data.notes;
+}
+
+/* Firebase */
+const firebaseConfig = { apiKey:"YOUR_KEY", authDomain:"YOUR_DOMAIN", projectId:"YOUR_PROJECT_ID" };
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+</script>
+
+</body>
+</html>
